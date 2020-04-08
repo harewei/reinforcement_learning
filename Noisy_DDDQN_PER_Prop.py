@@ -1,6 +1,5 @@
 # Dueling Double DQN with Experience Replay using Proportional method.
-# It uses V+A in order to compute Q value, and uses the average instead of max
-# for advantage in order to obtain better stability.
+# Noisy is added at the end of advantage node to encourage exploration.
 
 import gym
 import numpy as np
