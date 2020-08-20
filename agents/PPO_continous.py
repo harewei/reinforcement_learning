@@ -1,14 +1,17 @@
-# FIXME: bad result
+# FIXME: continous not yet implemented
+# FIXME: PPO poor performance already
 # PPO algorithm is almost the same as A2C, except loss is clipped based on current and previous
 # policy ratio.
 
 import gym
 import numpy as np
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras import backend as K
-from keras.optimizers import Adam
-from util import visualization
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
 
 
 class PPO:
@@ -141,7 +144,7 @@ class PPO:
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "PPO.png")
+                    visualize(episode_reward, episode_count, slide_window, "PPO.png")
                     break
 
                 state = next_state

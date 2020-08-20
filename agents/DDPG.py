@@ -4,11 +4,13 @@
 
 import gym
 import numpy as np
-from keras.layers import Dense, Input, Activation, Concatenate
-from keras import Model
-from keras.optimizers import Adam
-from util import visualization
-from keras import backend as K
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation, Concatenate
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
+from tensorflow.keras import backend as K
 import random
 
 
@@ -176,7 +178,7 @@ class DDPG:
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "DDPG.png")
+                    visualize(episode_reward, episode_count, slide_window, "DDPG.png")
                     break
 
                 state = next_state

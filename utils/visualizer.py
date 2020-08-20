@@ -3,6 +3,8 @@ mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
+save_location = "./result"
+
 # Plot configurations
 plt.figure(1, figsize=(20, 20), dpi=80, facecolor='w', edgecolor='k')
 font = {'family': 'sans-serif',
@@ -15,7 +17,7 @@ avg_rewards = []
 episode_counts = []
 
 
-def visualization(episode_reward, episode_count, slide_window, filename):
+def visualize(episode_reward, episode_count, slide_window, filename):
     rewards.append(episode_reward)
     episode_counts.append(episode_count)
     if len(rewards) > slide_window:

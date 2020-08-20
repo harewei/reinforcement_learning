@@ -3,11 +3,12 @@
 
 import gym
 import numpy as np
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
-from util import visualization
-import keras.backend as K
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
 import random
 from itertools import count
 
@@ -185,7 +186,7 @@ class A2C:
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "A2C_Offpolicy.png")
+                    visualize(episode_reward, episode_count, slide_window, "A2C_Offpolicy.png")
                     break
 
                 state = next_state

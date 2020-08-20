@@ -1,29 +1,43 @@
 # Double DQN.  Compared to DQN, it uses q_network rather than target_q_network
 # when selecting next action when extracting next q value.
 
-import gym
 import numpy as np
+import os
 import random
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
-from util import visualization
+
+from agent import Agent
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
 
 
-class DDQN():
-    def __init__(self):
-        self.gamma = 0.95   # reward discount
-        self.learning_rate = 0.001
-        self.memory_size = 10000
-        self.epsilon = 0.8  # Exploration rate
-        self.epsilon_min = 0.05
-        self.epsilon_decay = 0.995
+class DDQN(Agent):
+    def __init__(self, config, env):
+        self.gamma = config["gamma"]   # reward discount
+        self.learning_rate = config["learning_rate"]
+        self.memory_size = config["memory_size"]
+        self.epsilon = config["epsilon"]  # Exploration rate
+        self.epsilon_min = config["epsilon_min"]
+        self.epsilon_decay = config["epsilon_decay"]
+        self.batch_size = config["batch_size"]
+        self.update_frequency = config["update_frequency"]
+        self.num_actions = env.action_space.n
+        self.num_states = env.observation_space.shape[0]
+        self.max_episode = config["max_episode"]
+        self.max_step = config["max_step"]
+        self.slide_window = config["slide_window"]
+        self.render_environment = config["render_environment"]
+        self.result_path = config["result_path"]
         self.memory = []
-        self.batch_size = 32
         self.rewards = []
-        self.update_frequency = 50
+        self.env = env
+        self.q_network = self.build_agent()
+        self.target_q_network = self.build_agent()
 
-    def build_network(self):
+    def build_agent(self):
         input = Input(shape=(self.num_states,))
         layer = Dense(24, activation='relu')(input)
         layer = Dense(self.num_actions)(layer)
@@ -42,36 +56,26 @@ class DDQN():
         self.memory.append([state, action, reward, next_state, done])
 
     def train(self):
-        # Setup environment first
-        env = gym.make('CartPole-v1')
-        env.seed(1)
-        env = env.unwrapped
-
-        self.num_actions = env.action_space.n
-        self.num_states = env.observation_space.shape[0]
-
         # Initialize q_network and target_q_network
-        q_network = self.build_network()
-        target_q_network = self.build_network()
-        target_q_network.set_weights(q_network.get_weights())
+        self.target_q_network.set_weights(self.q_network.get_weights())
 
         max_episode = 100000
         max_step = 10000
         slide_window = 100
 
         # Populate memory first
-        state = env.reset()
+        state = self.env.reset()
         print("Warming up...")
         while len(self.memory) < self.batch_size:
-            action = env.action_space.sample()
-            next_state, reward, done, info = env.step(action)
+            action = self.env.action_space.sample()
+            next_state, reward, done, info = self.env.step(action)
             self.store_memory(state, action, reward, next_state, done)
             if done:
-                state = env.reset()
+                state = self.env.reset()
         print("Warm up complete.")
 
         for episode_count in range(max_episode):
-            state = env.reset()
+            state = self.env.reset()
             current_step = 0
             episode_reward = 0
 
@@ -79,7 +83,7 @@ class DDQN():
                 #env.render()
 
                 # Network predict
-                q_values = q_network.predict(np.reshape(state, (1, self.num_states))).ravel()
+                q_values = self.q_network.predict(np.reshape(state, (1, self.num_states))).ravel()
 
                 # Decide if exploring or not
                 if np.random.rand() >= self.epsilon:
@@ -88,7 +92,7 @@ class DDQN():
                     action = random.randrange(self.num_actions)
 
                 # Perform action
-                next_state, reward, done, info = env.step(action)
+                next_state, reward, done, info = self.env.step(action)
 
                 # Store transition
                 episode_reward += reward
@@ -106,23 +110,23 @@ class DDQN():
 
                 # Calculate all td_targets for current minibatch
                 states, actions, rewards, next_states, dones = minibatch
-                batch_q_values = q_network.predict_on_batch(np.array(states))
-                batch_next_q_values = target_q_network.predict_on_batch(np.array(next_states))
-                next_actions = np.argmax(q_network.predict_on_batch(np.array(next_states)), axis=1) # Main difference between DDQN and DQN
+                batch_q_values = self.q_network.predict_on_batch(np.array(states))
+                batch_next_q_values = self.target_q_network.predict_on_batch(np.array(next_states))
+                next_actions = np.argmax(self.q_network.predict_on_batch(np.array(next_states)), axis=1) # Main difference between DDQN and DQN
                 td_targets = batch_q_values.copy()
                 for i in range(self.batch_size):
                     td_targets[i][actions[i]] = rewards[i] + self.gamma * (1 - dones[i]) * batch_next_q_values[i][next_actions[i]]
 
                 # Train network
-                q_network.train_on_batch(np.array(states), np.array(td_targets))
+                self.q_network.train_on_batch(np.array(states), np.array(td_targets))
 
                 # Hard copy q_network to target_q_network
                 if done or current_step % self.update_frequency is 0:
-                    target_q_network.set_weights(q_network.get_weights())
+                    self.target_q_network.set_weights(self.q_network.get_weights())
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "DDQN.png")
+                    visualize(episode_reward, episode_count, slide_window, os.path.join(self.result_path, "DDQN.png"))
                     break
 
                 state = next_state

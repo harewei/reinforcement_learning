@@ -1,17 +1,14 @@
-# TODO: unfinished
-# A3C
+# Unlike REINFORCE, we do not wait for end of episode to train.  Also, the advantage is now calculated
+# from TD error, which are derived using critic network.
 
 import gym
 import numpy as np
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
-from util import visualization
-from threading import Thread, Lock
-import threading
-import tqdm
-from keras.utils import to_categorical
-from utils.networks import tfSummary
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
 
 
 class A2C:
@@ -21,7 +18,6 @@ class A2C:
         self.critic_learning_rate = 0.01
         self.memory = []
         self.batch_size = 32
-        self.render = False
 
     def build_actor(self):
         input = Input(shape=(self.num_states,))
@@ -57,49 +53,6 @@ class A2C:
     def store_memory(self, state, action, reward, next_state, done):
         self.memory.append([state, action, reward, next_state, done])
 
-    # Function for worker threads to run training.
-    def worker_train(self, agent, Nmax, env, action_dim, f, summary_writer, tqdm, render):
-        lock = Lock()
-
-        global episode
-        while episode < Nmax:
-            # Reset episode
-            time, cumul_reward, done = 0, 0, False
-            old_state = env.reset()
-            actions, states, rewards = [], [], []
-            while not done and episode < Nmax:
-                if render:
-                    with lock: env.render()
-                # Actor picks an action (following the policy)
-                a = agent.policy_action(np.expand_dims(old_state, axis=0))
-                # Retrieve new state, reward, and whether the state is terminal
-                new_state, r, done, _ = env.step(a)
-                # Memorize (s, a, r) for training
-                actions.append(to_categorical(a, action_dim))
-                rewards.append(r)
-                states.append(old_state)
-                # Update current state
-                old_state = new_state
-                cumul_reward += r
-                time += 1
-                # Asynchronous training
-                if (time % f == 0 or done):
-                    lock.acquire()
-                    agent.train_models(states, actions, rewards, done)
-                    lock.release()
-                    actions, states, rewards = [], [], []
-
-            # Export results for Tensorboard
-            score = tfSummary('score', cumul_reward)
-            summary_writer.add_summary(score, global_step=episode)
-            summary_writer.flush()
-            # Update episode count
-            with lock:
-                tqdm.set_description("Score: " + str(cumul_reward))
-                tqdm.update(1)
-                if episode < Nmax:
-                    episode += 1
-
     def train(self):
         # Setup environment first
         env = gym.make('CartPole-v1')
@@ -109,8 +62,8 @@ class A2C:
         self.num_actions = env.action_space.n
         self.num_states = env.observation_space.shape[0]
 
-        global_actor = self.build_actor()
-        global_critic = self.build_critic()
+        actor = self.build_actor()
+        critic = self.build_critic()
 
         max_episode = 100000
         max_step = 10000
@@ -122,11 +75,10 @@ class A2C:
             episode_reward = 0
 
             while True:
-                if self.render:
-                    env.render()
+                #env.render()
 
                 # Actor select action, observe reward and state, then store them
-                action = self.select_action(state, global_actor)
+                action = self.select_action(state, actor)
                 next_state, reward, done, info = env.step(action)
 
                 # Store transition
@@ -139,25 +91,25 @@ class A2C:
                     states, actions, rewards, next_states, dones = self.memory
 
                     # Calculate advantage
-                    batch_values = global_critic.predict_on_batch(np.array(states)).ravel()
-                    batch_next_values = global_critic.predict_on_batch(np.array(next_states)).ravel()
+                    batch_values = critic.predict_on_batch(np.array(states)).ravel()
+                    batch_next_values = critic.predict_on_batch(np.array(next_states)).ravel()
                     td_targets = rewards + self.gamma * (1 - np.array(dones)) * batch_next_values
                     td_errors = td_targets - batch_values
                     advantages = np.zeros((self.batch_size, self.num_actions))
                     for i in range(self.batch_size):
                         advantages[i][actions[i]] = td_errors[i]
 
-                    # Train global_critic
-                    global_critic.train_on_batch(np.array(states), np.array(td_targets))
+                    # Train critic
+                    critic.train_on_batch(np.array(states), np.array(td_targets))
 
-                    # Train global_actor
-                    global_actor.train_on_batch(np.array(states), np.array(advantages))
+                    # Train actor
+                    actor.train_on_batch(np.array(states), np.array(advantages))
 
                     self.memory = []
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "A2C.png")
+                    visualize(episode_reward, episode_count, slide_window, "A2C.png")
                     break
 
                 state = next_state

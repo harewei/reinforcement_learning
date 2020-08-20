@@ -1,16 +1,18 @@
-# Note this is the newer version (2015) of DQN, which uses an extra target network compared to
-# the old one.
+# Double DQN.  Compared to DQN, it uses q_network rather than target_q_network
+# when selecting next action when extracting next q value.
 
 import gym
 import numpy as np
 import random
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
-from util import visualization
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
 
 
-class DQN():
+class C51_DDQN():
     def __init__(self):
         self.gamma = 0.95   # reward discount
         self.learning_rate = 0.001
@@ -22,15 +24,20 @@ class DQN():
         self.batch_size = 32
         self.rewards = []
         self.update_frequency = 50
+        self.num_atoms = 51
+        self.v_max = 1000 # Max possible score for Defend the center is 26 - 0.1*26 = 23.4
+        self.v_min = 0
 
     def build_network(self):
         input = Input(shape=(self.num_states,))
         layer = Dense(24, activation='relu')(input)
-        layer = Dense(self.num_actions)(layer)
-        output = Activation('linear')(layer)
-        model = Model(input, output)
+        distribution_list = []
+        # C51 atoms
+        for i in range(self.num_actions):
+            distribution_list.append(Dense(self.num_atoms, activation='softmax')(layer))
+        model = Model(input, distribution_list)
         adam = Adam(lr=self.learning_rate)
-        model.compile(loss='mse', optimizer=adam)
+        model.compile(loss='categorical_crossentropy', optimizer=adam)
 
         return model
 
@@ -50,10 +57,10 @@ class DQN():
         self.num_actions = env.action_space.n
         self.num_states = env.observation_space.shape[0]
 
-        # Initialize q_network and target_q_network
-        q_network = self.build_network()
-        target_q_network = self.build_network()
-        target_q_network.set_weights(q_network.get_weights())
+        # Initialize z_network and target_z_network
+        z_network = self.build_network()
+        target_z_network = self.build_network()
+        target_z_network.set_weights(z_network.get_weights())
 
         max_episode = 100000
         max_step = 10000
@@ -79,7 +86,9 @@ class DQN():
                 #env.render()
 
                 # Network predict
-                q_values = q_network.predict(np.reshape(state, (1, self.num_states))).ravel()
+                z_values = z_network.predict(np.reshape(state, (1, self.num_states)))
+                q_values = np.sum(np.multiply(np.squeeze(z_values), np.squeeze(np.array(z_values))), axis=1)
+                #q_values = q_values.reshape((self.batch_size, self.num_actions), order='F')
 
                 # Decide if exploring or not
                 if np.random.rand() >= self.epsilon:
@@ -106,28 +115,32 @@ class DQN():
 
                 # Calculate all td_targets for current minibatch
                 states, actions, rewards, next_states, dones = minibatch
-                batch_q_values = q_network.predict_on_batch(np.array(states))
-                batch_next_q_values = target_q_network.predict_on_batch(np.array(next_states))
-                max_next_q_values = np.max(batch_next_q_values, axis=1)
-                td_targets = batch_q_values.copy()
+                batch_z_values = z_network.predict_on_batch(np.array(states))
+                batch_next_z_values = target_z_network.predict_on_batch(np.array(next_states))
+                batch_z_values = np.swapaxes(batch_z_values, 0, 1)  # I like dealing with batch size at axis 0
+                batch_next_z_values = np.swapaxes(batch_next_z_values, 0, 1)
+                batch_q_values = np.sum(np.multiply(np.array(batch_z_values), np.array(batch_z_values)), axis=2)
+                next_actions = np.argmax(batch_q_values, axis=1)
+                exit()
+                td_targets = batch_z_values.copy()
                 for i in range(self.batch_size):
-                    td_targets[i][actions[i]] = rewards[i] + self.gamma * (1 - dones[i]) * max_next_q_values[i]
+                    td_targets[i][actions[i]] = rewards[i] + self.gamma * (1 - dones[i]) * batch_next_z_values[i][next_actions[i]]
 
                 # Train network
-                q_network.train_on_batch(np.array(states), np.array(td_targets))
+                z_network.train_on_batch(np.array(states), np.array(td_targets))
 
-                # Copy q_network to target_q_network
+                # Hard copy z_network to target_z_network
                 if done or current_step % self.update_frequency is 0:
-                    target_q_network.set_weights(q_network.get_weights())
+                    target_z_network.set_weights(z_network.get_weights())
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "DQN.png")
+                    visualize(episode_reward, episode_count, slide_window, "DDQN.png")
                     break
 
                 state = next_state
                 current_step += 1
 
 if __name__ == '__main__':
-    agent = DQN()
+    agent = C51_DDQN()
     agent.train()

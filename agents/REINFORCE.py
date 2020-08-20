@@ -1,9 +1,11 @@
 import gym
 import numpy as np
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
-from util import visualization
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
+from utils.visualizer import visualize
 
 
 class REINFORCE():
@@ -102,7 +104,7 @@ class REINFORCE():
 
                     # For logging data
                     if done or current_step > max_step:
-                        visualization(episode_reward, episode_count, slide_window, "REINFORCE.png")
+                        visualize(episode_reward, episode_count, slide_window, "REINFORCE.png")
 
                     # Clear memory after episode finishes
                     self.states, self.actions, self.rewards = [], [], []

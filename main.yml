@@ -1,0 +1,10 @@
+result_dir: "result"
+agent: "DDQN_PER_Prop"
+mode: "train"
+agent_config_dir: "config"
+environment: "CartPole-v1"
+environment_seed: 1
+render_environment: False
+max_episode: 100000
+max_step: 10000
+slide_window: 100

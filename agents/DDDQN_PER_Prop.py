@@ -1,14 +1,18 @@
-# Double DQN with Experience Replay using Proportional method (sumtree).
+# Dueling Double DQN with Experience Replay using Proportional method.
+# It uses V+A in order to compute Q value, and uses the average instead of max
+# for advantage in order to obtain better stability.
 
 import gym
 import numpy as np
 import random
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation, Lambda
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
 import keras.backend as K
 from itertools import count
-from util import visualization
+from utils.visualizer import visualize
 
 
 # Memory storage method when using proportional method
@@ -67,7 +71,7 @@ class SumTree:
         return (idx, self.tree[idx], self.data[dataIdx])
 
 
-class DDQN_PER():
+class DDDQN_PER_Prop():
     def __init__(self):
         self.gamma = 0.95   # reward discount
         self.learning_rate = 0.001
@@ -90,8 +94,11 @@ class DDQN_PER():
     def build_network(self):
         input = Input(shape=(self.num_states,))
         layer = Dense(24, activation='relu')(input)
-        layer = Dense(self.num_actions)(layer)
-        output = Activation('linear')(layer)
+        layer_v = Dense(1)(layer)
+        layer_a = Dense(self.num_actions)(layer)
+        v = Activation('linear')(layer_v)
+        a = Activation('linear')(layer_a)
+        output = Lambda(lambda x: x[0] + x[1] - K.mean(x[1], axis=1, keepdims=True), output_shape=(self.num_actions,))([v, a])  # Q = V + A
         model = Model(input, output)
         adam = Adam(lr=self.learning_rate)
 
@@ -208,12 +215,12 @@ class DDQN_PER():
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "DDQN_PER_Prop.png")
+                    visualize(episode_reward, episode_count, slide_window, "DDDQN_PER_Prop.png")
                     break
 
                 state = next_state
                 current_step += 1
 
 if __name__ == '__main__':
-    agent = DDQN_PER()
+    agent = DDDQN_PER_Prop()
     agent.train()

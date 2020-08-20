@@ -4,13 +4,15 @@
 import gym
 import numpy as np
 import random
-from keras.layers import Dense, Input, Activation, Lambda
-from keras import Model, activations, initializers, regularizers, constraints
-from keras.engine.topology import Layer
-from keras.optimizers import Adam
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation, Lambda
+from tensorflow.keras import Model, activations, initializers, regularizers, constraints
+from tensorflow.keras.engine.topology import Layer
+from tensorflow.keras.optimizers import Adam
 import keras.backend as K
 from itertools import count
-from util import visualization
+from utils.visualizer import visualize
 import tensorflow as tf
 
 
@@ -303,7 +305,7 @@ class Noisy_DDDQN_PER_Prop():
 
                 # For logging data
                 if done or current_step > max_step:
-                    visualization(episode_reward, episode_count, slide_window, "Noisy_DDDQN_PER_Prop.png")
+                    visualize(episode_reward, episode_count, slide_window, "Noisy_DDDQN_PER_Prop.png")
                     break
 
                 state = next_state

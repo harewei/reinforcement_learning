@@ -144,3 +144,7 @@ static
 
 # PyCharm
 .idea
+
+# Result and model folder
+/result
+/model

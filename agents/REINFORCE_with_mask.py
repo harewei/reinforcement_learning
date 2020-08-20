@@ -4,10 +4,11 @@ mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from keras.layers import Dense, InputLayer, Input, Activation, Lambda, multiply
-from keras import Model
-from keras import backend as K
-from keras.optimizers import Adam
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, InputLayer, Input, Activation, Lambda, multiply
+from tensorflow.keras import Model
+from tensorflow.keras import backend as K
+from tensorflow.keras.optimizers import Adam
 
 DISPLAY_REWARD_THRESHOLD = 400  # renders environment if total episode reward is greater then this threshold
 RENDER = True  # rendering wastes time

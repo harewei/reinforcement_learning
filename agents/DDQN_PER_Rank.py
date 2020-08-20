@@ -7,9 +7,11 @@ mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-from keras.layers import Dense, Input, Activation
-from keras import Model
-from keras.optimizers import Adam
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
+from tensorflow.keras.layers import Dense, Input, Activation
+from tensorflow.keras import Model
+from tensorflow.keras.optimizers import Adam
 import heapq
 from itertools import count
 
