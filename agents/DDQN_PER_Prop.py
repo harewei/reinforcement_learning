@@ -12,6 +12,8 @@ from tensorflow.keras.layers import Dense, Input, Activation
 from tensorflow.keras import Model
 from tensorflow.keras.optimizers import Adam
 import tensorflow.keras.backend as K
+from tqdm import trange
+from utils.logger import Logger
 from utils.visualizer import visualize
 
 # Memory storage method when using proportional method
@@ -87,7 +89,6 @@ class DDQN_PER_Prop(Agent):
         self.slide_window = config["slide_window"]
         self.render_environment = config["render_environment"]
         self.result_path = config["result_path"]
-        self.rewards = []
         self.memory = SumTree(self.memory_size)
         self.counter = count()  # In case multiple memories with same priority
         self.replay_frequency = config["replay_frequency"]
@@ -98,10 +99,10 @@ class DDQN_PER_Prop(Agent):
         self.constant = 1e-10   # In case priority is 0
         self.max_episode = config["max_episode"]
         self.max_step = config["max_step"]
-        self.slide_window = config["slide_window"]
         self.env = env
         self.q_network = self.build_agent()
         self.target_q_network = self.build_agent()
+        self.logger = Logger(config["slide_window"])
 
     def build_agent(self):
         input = Input(shape=(self.num_states,))
@@ -138,13 +139,15 @@ class DDQN_PER_Prop(Agent):
                 state = self.env.reset()
         print("Warm up complete.")
 
-        for episode_count in range(self.max_episode):
+        t = trange(self.max_episode)
+        for episode_count in t:
             state = self.env.reset()
             current_step = 0
             episode_reward = 0
 
             while True:
-                #env.render()
+                if self.render_environment:
+                    self.env.render()
 
                 # Network predict
                 q_values = self.q_network.predict(np.reshape(state, (1, self.num_states))).ravel()
@@ -209,9 +212,16 @@ class DDQN_PER_Prop(Agent):
                     if done or current_step % self.update_frequency is 0:
                         self.target_q_network.set_weights(self.q_network.get_weights())
 
-                # For logging data
+                # For logging and visualizing data
                 if done or current_step > self.max_step:
-                    visualize(episode_reward, episode_count, self.slide_window, os.path.join(self.result_path, "DDQN_PER_Prop.png"))
+                    self.logger.log_history(episode_reward, episode_count)
+                    t.set_description("Episode: {}, Reward: {}".format(episode_count, episode_reward))
+                    t.set_postfix(running_reward="{:.2f}".format(self.logger.running_rewards[-1]))
+                    if episode_count % self.logger.slide_window == 0:
+                        visualize(self.logger.rewards,
+                                  self.logger.running_rewards,
+                                  self.logger.episode_counts,
+                                  os.path.join(self.result_path, "DDQN_PER_Prop.png"))
                     break
 
                 state = next_state

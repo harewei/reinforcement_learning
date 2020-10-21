@@ -11,6 +11,8 @@ tf.compat.v1.disable_eager_execution()
 from tensorflow.keras.layers import Dense, Input, Activation
 from tensorflow.keras import Model
 from tensorflow.keras.optimizers import Adam
+from tqdm import trange
+from utils.logger import Logger
 from utils.visualizer import visualize
 
 
@@ -28,14 +30,13 @@ class DDQN(Agent):
         self.num_states = env.observation_space.shape[0]
         self.max_episode = config["max_episode"]
         self.max_step = config["max_step"]
-        self.slide_window = config["slide_window"]
         self.render_environment = config["render_environment"]
         self.result_path = config["result_path"]
         self.memory = []
-        self.rewards = []
         self.env = env
         self.q_network = self.build_agent()
         self.target_q_network = self.build_agent()
+        self.logger = Logger(config["slide_window"])
 
     def build_agent(self):
         input = Input(shape=(self.num_states,))
@@ -74,13 +75,15 @@ class DDQN(Agent):
                 state = self.env.reset()
         print("Warm up complete.")
 
-        for episode_count in range(max_episode):
+        t = trange(self.max_episode)
+        for episode_count in t:
             state = self.env.reset()
             current_step = 0
             episode_reward = 0
 
             while True:
-                #env.render()
+                if self.render_environment:
+                    self.env.render()
 
                 # Network predict
                 q_values = self.q_network.predict(np.reshape(state, (1, self.num_states))).ravel()
@@ -124,9 +127,15 @@ class DDQN(Agent):
                 if done or current_step % self.update_frequency is 0:
                     self.target_q_network.set_weights(self.q_network.get_weights())
 
-                # For logging data
-                if done or current_step > max_step:
-                    visualize(episode_reward, episode_count, slide_window, os.path.join(self.result_path, "DDQN.png"))
+                # For logging and visualizing data
+                if done or current_step > self.max_step:
+                    self.logger.log_history(episode_reward, episode_count)
+                    self.logger.show_progress(t, episode_reward, episode_count)
+                    if episode_count % self.logger.slide_window == 0:
+                        visualize(self.logger.rewards,
+                                  self.logger.running_rewards,
+                                  self.logger.episode_counts,
+                                  os.path.join(self.result_path, "DDQN.png"))
                     break
 
                 state = next_state

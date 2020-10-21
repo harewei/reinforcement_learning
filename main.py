@@ -1,22 +1,26 @@
-import os
-import sys
 import gym
-import yaml
-import time
 import logging
-from datetime import datetime
-import random
-from shutil import copyfile
+import os
+import time
+import yaml
+
 import click
 from agents.DQN import DQN
 from agents.DDQN import DDQN
 from agents.DDQN_PER_Prop import DDQN_PER_Prop
+from agents.A2C import A2C
+from agents.REINFORCE import REINFORCE
+from shutil import copyfile
+import tensorflow as tf
 
 logging.basicConfig(level=logging.DEBUG)
 
 @click.command()
 @click.argument("config_file")
 def main(config_file):
+    # Check TF version
+    logging.info("Tensorflow version: {}".format(tf.version.VERSION))
+
     # Load main config file
     with open(config_file, "r") as f:
         config = yaml.load(f)
@@ -65,6 +69,12 @@ def main(config_file):
         agent.train()
     elif agent_type == "DDQN_PER_Prop":
         agent = DDQN_PER_Prop(agent_config, env)
+        agent.train()
+    elif agent_type == "A2C":
+        agent = A2C(agent_config, env)
+        agent.train()
+    elif agent_type == "REINFORCE":
+        agent = REINFORCE(agent_config, env)
         agent.train()
     else:
         raise KeyError("Agent type does not exist")

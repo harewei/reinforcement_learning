@@ -1,0 +1,3 @@
+gamma: 0.95   # Reward discount
+lr: 0.01
+layers: [10]

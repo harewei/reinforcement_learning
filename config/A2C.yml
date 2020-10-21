@@ -1,0 +1,6 @@
+gamma: 0.9   # Reward discount
+actor_lr: 0.001
+critic_lr: 0.01
+actor_layers: [50, 256]
+critic_layers: [50, 256]
+batch_size: 32

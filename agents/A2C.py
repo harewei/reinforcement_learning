@@ -1,44 +1,62 @@
 # Unlike REINFORCE, we do not wait for end of episode to train.  Also, the advantage is now calculated
 # from TD error, which are derived using critic network.
 
-import gym
+import os
 import numpy as np
 import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
 from tensorflow.keras.layers import Dense, Input, Activation
 from tensorflow.keras import Model
 from tensorflow.keras.optimizers import Adam
+from tqdm import trange
+from utils.logger import Logger
 from utils.visualizer import visualize
 
 
 class A2C:
-    def __init__(self):
-        self.gamma = 0.9   # Reward discount
-        self.actor_learning_rate = 0.001
-        self.critic_learning_rate = 0.01
+    def __init__(self, config, env):
+        self.gamma = config["gamma"]   # Reward discount
+        self.actor_lr = config["actor_lr"]
+        self.critic_lr = config["critic_lr"]
+        self.actor_layers = config["actor_layers"]
+        self.critic_layers = config["critic_layers"]
         self.memory = []
-        self.batch_size = 32
+        self.result_path = config["result_path"]
+        self.batch_size = config["batch_size"]
+        self.env = env
+        self.render_environment = config["render_environment"]
+        self.max_episode = config["max_episode"]
+        self.max_step = config["max_step"]
+        self.max_episode = config["max_episode"]
+        self.max_step = config["max_step"]
+        self.num_actions = env.action_space.n
+        self.num_states = env.observation_space.shape[0]
+        self.actor = self.build_actor()
+        self.critic = self.build_critic()
+        self.logger = Logger(config["slide_window"])
 
     def build_actor(self):
         input = Input(shape=(self.num_states,))
-        layer = Dense(50, activation='relu')(input)
-        layer = Dense(256, activation='relu')(layer)
+        layer = input
+        for num_nodes in self.actor_layers:
+            layer = Dense(num_nodes, activation='relu')(layer)
         logit = Dense(self.num_actions)(layer)
         output = Activation('softmax')(logit)
         model = Model(input, output)
-        adam = Adam(lr=self.actor_learning_rate)
+        adam = Adam(lr=self.actor_lr)
         model.compile(loss='categorical_crossentropy', optimizer=adam)
 
         return model
 
     def build_critic(self):
         input = Input(shape=(self.num_states,))
-        layer = Dense(50, activation='relu')(input)
-        layer = Dense(256, activation='relu')(layer)
+        layer = input
+        for num_nodes in self.actor_layers:
+            layer = Dense(num_nodes, activation='relu')(layer)
         layer = Dense(1)(layer)
         output = Activation('linear')(layer)
         model = Model(input, output)
-        adam = Adam(lr=self.critic_learning_rate)
+        adam = Adam(lr=self.critic_lr)
         model.compile(loss='mse', optimizer=adam)
 
         return model
@@ -54,32 +72,19 @@ class A2C:
         self.memory.append([state, action, reward, next_state, done])
 
     def train(self):
-        # Setup environment first
-        env = gym.make('CartPole-v1')
-        env.seed(1)
-        env = env.unwrapped
-
-        self.num_actions = env.action_space.n
-        self.num_states = env.observation_space.shape[0]
-
-        actor = self.build_actor()
-        critic = self.build_critic()
-
-        max_episode = 100000
-        max_step = 10000
-        slide_window = 50
-
-        for episode_count in range(max_episode):
-            state = env.reset()
+        t = trange(self.max_episode)
+        for episode_count in t:
+            state = self.env.reset()
             current_step = 0
             episode_reward = 0
 
             while True:
-                #env.render()
+                if self.render_environment:
+                    self.env.render()
 
                 # Actor select action, observe reward and state, then store them
-                action = self.select_action(state, actor)
-                next_state, reward, done, info = env.step(action)
+                action = self.select_action(state, self.actor)
+                next_state, reward, done, info = self.env.step(action)
 
                 # Store transition
                 episode_reward += reward
@@ -91,8 +96,8 @@ class A2C:
                     states, actions, rewards, next_states, dones = self.memory
 
                     # Calculate advantage
-                    batch_values = critic.predict_on_batch(np.array(states)).ravel()
-                    batch_next_values = critic.predict_on_batch(np.array(next_states)).ravel()
+                    batch_values = self.critic.predict_on_batch(np.array(states)).ravel()
+                    batch_next_values = self.critic.predict_on_batch(np.array(next_states)).ravel()
                     td_targets = rewards + self.gamma * (1 - np.array(dones)) * batch_next_values
                     td_errors = td_targets - batch_values
                     advantages = np.zeros((self.batch_size, self.num_actions))
@@ -100,21 +105,24 @@ class A2C:
                         advantages[i][actions[i]] = td_errors[i]
 
                     # Train critic
-                    critic.train_on_batch(np.array(states), np.array(td_targets))
+                    self.critic.train_on_batch(np.array(states), np.array(td_targets))
 
                     # Train actor
-                    actor.train_on_batch(np.array(states), np.array(advantages))
+                    self.actor.train_on_batch(np.array(states), np.array(advantages))
 
                     self.memory = []
 
-                # For logging data
-                if done or current_step > max_step:
-                    visualize(episode_reward, episode_count, slide_window, "A2C.png")
+                # For logging and visualizing data
+                if done or current_step > self.max_step:
+                    self.logger.log_history(episode_reward, episode_count)
+                    self.logger.show_progress(t, episode_reward, episode_count)
+                    if episode_count % self.logger.slide_window == 0:
+                        visualize(self.logger.rewards,
+                                  self.logger.running_rewards,
+                                  self.logger.episode_counts,
+                                  os.path.join(self.result_path, "A2C.png"))
                     break
 
                 state = next_state
                 current_step += 1
 
-if __name__ == '__main__':
-    agent = A2C()
-    agent.train()
